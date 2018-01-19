@@ -1,9 +1,9 @@
 {
     "config": {
-        "sock-type": "TCP",
+        "sock-type": "UDP",
         "modem_trace": {
             "help": "Turns AT command trace on/off from the cellular modem, defaults to off",
-            "value": false
+            "value": true
         },
         "sim-pin-code": {
             "help": "SIM PIN code",
@@ -11,7 +11,7 @@
         },
         "apn": {
             "help": "The APN string to use for this SIM/network, set to 0 if none",
-            "value": "\"internet\""
+            "value": "\"m2m.com.attz\""
         },
         "username": {
             "help": "The user name string to use for this APN, set to zero if none",
@@ -31,7 +31,8 @@
             "lwip.tcp-enabled": true,
             "platform.stdio-convert-newlines": true,
             "platform.stdio-baud-rate": 115200,
-            "platform.default-serial-baud-rate": 115200
+            "platform.default-serial-baud-rate": 115200,
+            "mbed-trace.enable": 1
         }
     }
 }
