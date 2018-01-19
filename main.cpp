@@ -159,7 +159,7 @@ nsapi_error_t test_send_recv(WNC14A2AInterface *iface)
     sock.set_timeout(15000);
     int n = 0;
     const char *echo_string = "TEST";
-    char recv_buf[4];
+    char recv_buf[512];
 #if MBED_CONF_APP_SOCK_TYPE == TCP
     retcode = sock.connect(sock_addr);
     if (retcode < 0) {
@@ -181,7 +181,7 @@ nsapi_error_t test_send_recv(WNC14A2AInterface *iface)
     }
 
     // get the first message
-    n = sock.recv((void*) recv_buf, sizeof(recv_buf));
+    n = sock.recv((void*) recv_buf, 512);
 
     if (n > 0) {
         snprintf(print_text, PRINT_TEXT_LENGTH, "Received from echo server %d Bytes\n", n);
@@ -189,7 +189,7 @@ nsapi_error_t test_send_recv(WNC14A2AInterface *iface)
     }
 
     // get the second message
-    n = sock.recv((void*) recv_buf, sizeof(recv_buf));
+    n = sock.recv((void*) recv_buf, 4);
 #else
 
     retcode = sock.sendto(sock_addr, (void*) echo_string, sizeof(echo_string));
@@ -202,7 +202,7 @@ nsapi_error_t test_send_recv(WNC14A2AInterface *iface)
         tr_info(print_text);
     }
 
-    n = sock.recvfrom(&sock_addr, (void*) recv_buf, sizeof(recv_buf));
+    n = sock.recvfrom(&sock_addr, (void*) recv_buf, 4);
 #endif
 
     sock.close();

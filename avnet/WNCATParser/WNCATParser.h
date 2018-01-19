@@ -323,6 +323,9 @@ private:
 
     void _packet_handler(const char *response);
 
+    int32_t _check_queue(int id, void *data, uint32_t amount);
+    int32_t _enqueue(int id, char *data, uint32_t amount);
+
     void _debug_dump(const char *prefix, const uint8_t *b, size_t size);
 
     bool _initialized;

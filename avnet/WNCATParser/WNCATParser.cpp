@@ -620,6 +620,7 @@ bool parse_ip_addr(char *str) {
 }
 
 void WNCATParser::_packet_handler(const char *response) {
+#if 0
     int id;
     int session_indicator;
     unsigned int amount;
@@ -633,7 +634,6 @@ void WNCATParser::_packet_handler(const char *response) {
       }
       tr_debug("@SOCKDATAIND id=%d, session_indicator=%d, amount=%d\n",id,session_indicator,amount);
       if(amount) {
-         tr_debug("sending sockread\n");
          tx("AT@SOCKREAD=%d,%d",id, MAX_SEND_BYTES);
       }
       // TODO:  I don't like this
@@ -652,10 +652,10 @@ void WNCATParser::_packet_handler(const char *response) {
       id = active_id;
 
       // expect an OK
-      //rx("OK");
+      rx("OK");
 
       // expect another indicator
-      ////int still_left;
+      //int still_left;
       //scan("@SOCKDATAIND:%d,%d", &id, &still_left);
       //if (still_left) // if there's more, then request it
       //   tx("AT@SOCKREAD=%d,%d",id, MAX_SEND_BYTES);
@@ -698,47 +698,88 @@ void WNCATParser::_packet_handler(const char *response) {
       *_packets_end = packet;
       _packets_end = &packet->next;
     }
+#endif
+}
+
+int32_t WNCATParser::_check_queue(int id, void *data, uint32_t amount) {
+   // check if any packets are ready for us
+   for (struct packet **p = &_packets; *p; p = &(*p)->next) {
+      tr_debug("Inspect packet (id=%d)\n",(*p)->id);
+      if ((*p)->id == id) {
+            struct packet *q = *p;
+
+            tr_debug("Packet ready: %d\n",(int)q->len);
+            if (q->len <= amount) { // Return and remove full packet
+               //memcpy(data, q + 1, q->len);
+               memcpy(data, q->data, q->len);
+
+               if (_packets_end == &(*p)->next) {
+                  _packets_end = p;
+               }
+               *p = (*p)->next;
+
+               uint32_t len = q->len;
+               free(q);
+               return len;
+            } else { // return only partial packet
+               //memcpy(data, q + 1, amount);
+               memcpy(data, q->data, amount);
+
+               q->len -= amount;
+               //memmove(q + 1, (uint8_t *) (q + 1) + amount, q->len);
+               memmove(q->data, (uint8_t *) q->data + amount, q->len);
+
+               return amount;
+            }
+      }
+   }
+   return 0;
+}
+
+int32_t WNCATParser::_enqueue(int id, char *data, uint32_t amount) {
+   struct packet *packet = (struct packet *) malloc(sizeof(struct packet) + amount);
+   if (!packet) {
+      return -1;
+   }
+
+   packet->id = id;
+   packet->len = (uint32_t) amount;
+   packet->next = 0;
+
+   char tmp[3];
+   tmp[2] = 0;
+   char *packet_data = packet->data;
+   for(unsigned int n=0; n<amount*2; n+=2) {
+      tmp[0] = *data++;
+      tmp[1] = *data++;
+      *packet_data=(char)strtol(tmp,NULL,16);
+      //tr_debug("%s %02x\n",tmp, *packet_data);
+      packet_data++;
+   }
+
+   CIODUMP((uint8_t *) packet->data, (size_t)amount);
+
+   tr_debug("Enqueue packet id=%d len=%u\n",packet->id, (unsigned int)packet->len);
+
+   // append to packet list
+   *_packets_end = packet;
+   _packets_end = &packet->next;
+
+   return amount;
 }
 
 int32_t WNCATParser::recv(int id, void *data, uint32_t amount) {
+   int32_t ret = 0;
     Timer timer;
     timer.start();
 
-    tr_debug("recv(id=%d, amount=%d)\n",id, amount);
+    tr_debug("recv(id=%d, amount=%u)\n",id, (unsigned int)amount);
     while (timer.read_ms() < _timeout) {
         CSTDEBUG("WNC [%02d] !! _timeout=%d, time=%d\r\n", id, (int) _timeout, (int) timer.read() * 1000);
 
-        // check if any packets are ready for us
-        for (struct packet **p = &_packets; *p; p = &(*p)->next) {
-            tr_debug("Inspect packet (id=%d)\n",(*p)->id);
-            if ((*p)->id == id) {
-                struct packet *q = *p;
-
-                tr_debug("Packet ready: %d\n",(int)q->len);
-                if (q->len <= amount) { // Return and remove full packet
-                    //memcpy(data, q + 1, q->len);
-                    memcpy(data, q->data, q->len);
-
-                    if (_packets_end == &(*p)->next) {
-                        _packets_end = p;
-                    }
-                    *p = (*p)->next;
-
-                    uint32_t len = q->len;
-                    free(q);
-                    return len;
-                } else { // return only partial packet
-                    //memcpy(data, q + 1, amount);
-                    memcpy(data, q->data, amount);
-
-                    q->len -= amount;
-                    //memmove(q + 1, (uint8_t *) (q + 1) + amount, q->len);
-                    memmove(q->data, (uint8_t *) q->data + amount, q->len);
-
-                    return amount;
-                }
-            }
-        }
+        ret = _check_queue(id, data, amount);
+        if (ret)
+           return ret;
 
         // Wait for inbound packet
         // TODO check what happens when we receive a packet (like OK)
@@ -747,10 +788,33 @@ int32_t WNCATParser::recv(int id, void *data, uint32_t amount) {
         //int receivedId;
         //if (!scan("%d, CLOSED", &receivedId) && id == receivedId) {
         tr_debug("Scanning . . .\n");
+#if 0
         if(!rx("ERROR"))
             tr_error("Falling out\n");
             return -1;
        // }
+#else
+        int id, session_indicator;
+        uint32_t amount;
+        uint32_t actual_length;
+        char data[512];
+        if (scan("@SOCKDATAIND: %d,%d,%d", &id, &session_indicator, &amount) == 3) {
+            tr_debug("@SOCKDATAIND id=%d, session_indicator=%d, amount=%u\n",id,session_indicator,(unsigned int)amount);
+            // more data
+            if(amount) {
+               tx("AT@SOCKREAD=%d,%d",id, MAX_SEND_BYTES);
+            }
+            // no more data
+            else {
+               return -1;
+            }
+        }
+        if (scan("@SOCKREAD: %d,\"%s\"", &actual_length, data) == 2) {
+            tr_debug("Got data %u %s\n", (unsigned int)actual_length, data);
+            rx("OK");
+            _enqueue(id, data, actual_length);
+        }
+#endif
     }
 
     // timeout
@@ -848,6 +912,7 @@ bool WNCATParser::rx(const char *pattern, uint32_t timeout) {
 }
 
 int WNCATParser::checkURC(const char *response) {
+    /*
     if (!strncmp("@SOCKDATAIND:", response, 13)) {
         _packet_handler(response);
         return 0;
@@ -856,6 +921,7 @@ int WNCATParser::checkURC(const char *response) {
         _packet_handler(response);
         return 0;
     }
+    */
     if (!strncmp("%NOTIFY", response, 7)) {
         tr_debug("GSM -> %s\n", response);
         return 0;
