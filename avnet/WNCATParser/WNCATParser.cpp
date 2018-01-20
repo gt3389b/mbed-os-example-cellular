@@ -43,7 +43,7 @@
 #endif
 
 #define GSM_UART_BAUD_RATE 115200
-#define RXTX_BUFFER_SIZE   512
+#define RXTX_BUFFER_SIZE   1500
 #define MAX_SEND_BYTES     1400
 
 DigitalOut  mdm_uart2_rx_boot_mode_sel(PTC17);  // on powerup, 0 = boot mode, 1 = normal boot
@@ -489,10 +489,10 @@ bool WNCATParser::queryIP(const char *url, char *theIP) {
     return false;
 }
 
-bool WNCATParser::open(const char *type, int id, const char *addr, int port) {
+bool WNCATParser::open(nsapi_protocol_t type, int id) {
     int id_resp = -1;
 
-    tr_debug("open(type=%s, id=%d, addr=%s, port=%d)\n",type,id,addr,port);
+    tr_debug("open(type=%s, id=%d\n",type == NSAPI_UDP ? "UDP" : "TCP",id);
 
     if (id > WNC_SOCKET_COUNT) {
         return false;
@@ -500,12 +500,9 @@ bool WNCATParser::open(const char *type, int id, const char *addr, int port) {
 
     for(int i = 0; i < 3; i++) {
 
-       if (tx("AT@SOCKCREAT=%d,0", strcmp(type,"UDP")==0 ? WNC_UDP : WNC_TCP) && 
+       if (tx("AT@SOCKCREAT=%d,0", type==NSAPI_UDP ? WNC_UDP : WNC_TCP) && 
              scan("@SOCKCREAT:%d",&id_resp) && 
              rx("OK")) {
-
-          // connect to socket
-          tx("AT@SOCKCONN=%d,\"%s\",%d,30",id,addr,port) && rx("OK");
 
           if (id != id_resp) return false; //fail
 
@@ -516,6 +513,28 @@ bool WNCATParser::open(const char *type, int id, const char *addr, int port) {
     //TODO return a error code to debug the open fail in a better way
     return false;
 }
+
+bool WNCATParser::socket_connect(int id, const char *addr, int port) {
+
+    tr_debug("socket_connect(id=%d, addr=%s, port=%d)\n",id,addr,port);
+    if (!id) return false;
+    if (!addr) return false;
+    if (!port) return false;
+
+    if (id > WNC_SOCKET_COUNT) {
+        return false;
+    }
+
+    for(int i = 0; i < 3; i++) {
+       // connect to socket
+       if (tx("AT@SOCKCONN=%d,\"%s\",%d,30",id,addr,port) && rx("OK"))
+          return true;
+    }
+
+    //TODO return a error code to debug the open fail in a better way
+    return false;
+}
+
 
 void itohex(char *str, uint8_t *data, unsigned int data_length)
 {
@@ -539,8 +558,10 @@ bool WNCATParser::send(int id, const void *data, uint32_t amount) {
     uint32_t remainingAmount = amount;
     int sendDataSize = 0;
     while (remainingAmount > 0) {
-        sendDataSize = remainingAmount < MAX_SEND_BYTES ?  remainingAmount: MAX_SEND_BYTES;
+        sendDataSize = remainingAmount < MAX_SEND_BYTES ?  remainingAmount : MAX_SEND_BYTES;
         remainingAmount -= sendDataSize;
+
+         tr_debug("send(sendDataSize=%d, remainingAmount=%d)\n", (int)sendDataSize, remainingAmount);
 
         /* TODO if this retry is required?
          * TODO May take a second try if device is busy
@@ -559,9 +580,8 @@ bool WNCATParser::send(int id, const void *data, uint32_t amount) {
             int wrote;
             ret = tx("AT@SOCKWRITE=%d,%d,\"%s\"", id, sendDataSize, numStr) && 
                   scan("@SOCKWRITE:%d",&wrote) && rx("OK");
-            if (wrote != sendDataSize) return false;
-            if (!ret) return false;
 
+            if (ret && (wrote == sendDataSize)) break;
         } //for:i
         tempData += sendDataSize;
     }//while
@@ -722,7 +742,7 @@ void WNCATParser::attach(Callback<void()> func) {
 }
 
 bool WNCATParser::tx(const char *pattern, ...) {
-    char cmd[512];
+    char cmd[RXTX_BUFFER_SIZE];
 
     while (flushRx(cmd, sizeof(cmd), 10)) {
         CIODEBUG("GSM (%02d) !! '%s'\r\n", strlen(cmd), cmd);
@@ -734,7 +754,7 @@ bool WNCATParser::tx(const char *pattern, ...) {
 
     va_list ap;
     va_start(ap, pattern);
-    vsnprintf(cmd, 512, pattern, ap);
+    vsnprintf(cmd, RXTX_BUFFER_SIZE, pattern, ap);
     va_end(ap);
 
     _serial.puts(cmd);
@@ -746,11 +766,11 @@ bool WNCATParser::tx(const char *pattern, ...) {
 
 // readline ensuring the reader doesn't get notifications
 size_t WNCATParser::readline(char *buffer, size_t max, uint32_t timeout) {
-    char response[512];
+    char response[RXTX_BUFFER_SIZE];
 
     //TODO use if (readable()) here
     do {
-        _readline(response, 512 - 1, timeout);
+        _readline(response, RXTX_BUFFER_SIZE - 1, timeout);
     } while (checkURC(response) != -1);
    
     CIODEBUG("GSM (%02d) -> '%s'\r\n", strlen(response), response);
@@ -765,11 +785,11 @@ int WNCATParser::scan(const char *pattern, ...) {
     timer.start();
     uint32_t timeout = 10;
 
-    char response[512];
+    char response[RXTX_BUFFER_SIZE];
 
     //TODO use if (readable()) here
     do {
-        _readline(response, 512 - 1, 10);
+        _readline(response, RXTX_BUFFER_SIZE - 1, 10);
 
         if (timer.read() > timeout) {
            tr_error("scan() timeout\n");
@@ -791,10 +811,10 @@ bool WNCATParser::rx(const char *pattern, uint32_t timeout) {
     Timer timer;
     timer.start();
 
-    char response[512];
+    char response[RXTX_BUFFER_SIZE];
     size_t length = 0, patternLength = strnlen(pattern, sizeof(response));
     do {
-        length = _readline(response, 512 - 1, timeout);
+        length = _readline(response, RXTX_BUFFER_SIZE - 1, timeout);
         if (!length) return false;
         if (timer.read() > timeout) {
            tr_error("rx() timeout\n");

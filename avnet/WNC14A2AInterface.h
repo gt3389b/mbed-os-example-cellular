@@ -169,7 +169,7 @@ public:
      *  @return         0 on success, negative error code on failure
      */
     //using NetworkInterface::gethostbyname;
-    nsapi_error_t gethostbyname(const char* name, SocketAddress *address);
+    nsapi_error_t gethostbyname(const char* name, SocketAddress *address, nsapi_version_t version);
 
     /** Add a domain name server to list of servers to query
      *

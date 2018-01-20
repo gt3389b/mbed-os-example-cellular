@@ -164,9 +164,11 @@ struct wnc_socket {
 };
 
 
-nsapi_error_t WNC14A2AInterface::gethostbyname(const char* name, SocketAddress *address)
+nsapi_error_t WNC14A2AInterface::gethostbyname(const char* name, SocketAddress *address, nsapi_version_t version)
+   
 {
    nsapi_error_t ret = NSAPI_ERROR_OK;
+   if (version ==  NSAPI_IPv6) return NSAPI_ERROR_UNSUPPORTED;
    char ipAddr[16];
    memset(ipAddr,0,16);
    this->queryIP(name, ipAddr);
@@ -203,6 +205,13 @@ int WNC14A2AInterface::socket_open(void **handle, nsapi_protocol_t proto)
     socket->connected = false;
     *handle = socket;
     tr_debug("socket_open() = %d\n",id);
+
+#if 1
+    if (!_wnc.open(proto, socket->id)) {
+        return NSAPI_ERROR_DEVICE_ERROR;
+    }
+#endif
+
     return 0;
 }
 
@@ -237,11 +246,18 @@ int WNC14A2AInterface::socket_connect(void *handle, const SocketAddress &addr)
     struct wnc_socket *socket = (struct wnc_socket *)handle;
     _wnc.setTimeout(WNC_MISC_TIMEOUT);
 
+#if 0
     const char *proto = (socket->proto == NSAPI_UDP) ? "UDP" : "TCP";
-    tr_debug("socket_connect(%s)\n",socket->proto == NSAPI_UDP ? "UDP" : "TCP");
+    tr_debug("socket_connect(proto=%s)\n", proto);
     if (!_wnc.open(proto, socket->id, addr.get_ip_address(), addr.get_port())) {
         return NSAPI_ERROR_DEVICE_ERROR;
     }
+#else
+    tr_debug("socket_connect(id=%d)\n", socket->id);
+    if (!_wnc.socket_connect(socket->id, addr.get_ip_address(), addr.get_port())) {
+       return NSAPI_ERROR_DEVICE_ERROR;
+    }
+#endif
 
     socket->connected = true;
     return 0;

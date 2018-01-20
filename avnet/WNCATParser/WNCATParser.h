@@ -195,7 +195,9 @@ public:
     * @param addr the IP address of the destination
     * @return true only if socket opened successfully
     */
-    bool open(const char *type, int id, const char *addr, int port);
+    bool open(nsapi_protocol_t type, int id);
+
+    bool socket_connect(int id, const char *addr, int port);
 
     /**
     * Sends data to an open socket

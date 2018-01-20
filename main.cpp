@@ -146,7 +146,7 @@ nsapi_error_t test_send_recv(WNC14A2AInterface *iface)
 
     SocketAddress sock_addr;
     tr_debug("gethostbyename()\n");
-    retcode = iface->gethostbyname(host_name, &sock_addr);
+    retcode = iface->gethostbyname(host_name, &sock_addr, NSAPI_IPv4);
     if (retcode != NSAPI_ERROR_OK) {
         snprintf(print_text, PRINT_TEXT_LENGTH, "Couldn't resolve remote host: %s, code: %d\n", host_name,
                retcode);
