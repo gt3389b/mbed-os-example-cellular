@@ -27,7 +27,6 @@
 #include <string>
 #include "mbed_debug.h"
 #include "WNCATParser.h"
-#include "M66Types.h"
 #include "mbed-trace/mbed_trace.h"
 
 #define TRACE_GROUP "wncATP"
