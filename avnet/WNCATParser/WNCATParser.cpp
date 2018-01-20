@@ -1,10 +1,11 @@
 /*
- * ubirch#1 M66 Modem AT command parser.
+ * AVNET WNC 14A2A Modem AT command parser.
  *
- * @author Niranjan Rao
- * @date 2017-02-09
+ * @author Russell Leake
+ * @author Niranjan Rao (original)
+ * @date 2018-01-20
  *
- * @copyright &copy; 2015, 2016 ubirch GmbH (https://ubirch.com)
+ * @copyright &copy; 2018 Eaton (russellleake@eatoncom
  *
  * ```
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -146,7 +147,7 @@ bool WNCATParser::reset(void) {
 
     bool modemOn = false;
     for (int tries = 0; !modemOn && tries < 10; tries++) {
-        tr_debug("WNC [--] !! reset (%d)\r\n", tries);
+        tr_warn("WNC [--] !! reset (%d)\r\n", tries);
 
 
         if (isModemAlive()) return true;
@@ -174,11 +175,12 @@ bool WNCATParser::reset(void) {
 
         //ret = tx("AT&V") && rx("OK");
   		  // Get firmware version
-  		  tx("AT+GMR") && scancopy(response, 60) && rx("OK");
+  		  tx("AT+GMR") && scan("MPSS: %60s", response) && rx("OK");
 		  tr_debug("%s\n", response);
-  		  //tx("AT+QNWINFO") && scancopy(response, 60) && rx("OK");
+
+  		  //tx("AT+QNWINFO") && scan("%60s", response) && rx("OK");
 		  //tr_debug("%s\n", response);
-  		  //tx("AT%%CCID") && scancopy(response, 60) && rx("OK");
+  		  //tx("AT%%CCID") && scan("%60s", response) && rx("OK");
 		  //tr_debug("%s\n", response);
         
 		  //ret |= tx("AT%%CMATT=0") && rx("OK");
@@ -375,8 +377,7 @@ const char *WNCATParser::getIPAddress(void) {
     char buffer[256];
     //int size;
     tx("AT+CGCONTRDP=1");
-    //if ((size = scancopy(buffer, 256)) <= 0) {
-    if (!scancopy(buffer, 256)) {
+    if (scan("+CGCONTRDP: %256s", buffer) == 0) {
         tr_error("getIPAddress: not connected\n");
         return NULL;
     }
@@ -507,8 +508,7 @@ bool WNCATParser::open(const char *type, int id, const char *addr, int port) {
 
     tr_debug("open(type=%s, id=%d, addr=%s, port=%d)\n",type,id,addr,port);
 
-    //IDs only 0-5
-    if (id > 6) {
+    if (id > WNC_SOCKET_COUNT) {
         return false;
     }
 
@@ -592,9 +592,10 @@ bool WNCATParser::send(int id, const void *data, uint32_t amount) {
  * "PDP DEACT"      :: GPRS/CSD context was deactivated because of unknown reason
  */
 int WNCATParser::queryConnection() {
-    char resp[20];
     int qstate = -1;
 
+#if 0
+    char resp[20];
     tr_debug("queryConnection()\n");
     if (!(tx("ATV0") && rx("0"))) return false;
 
@@ -612,6 +613,7 @@ int WNCATParser::queryConnection() {
 
     if (!ret) return false;
 
+#endif
     return qstate;
 }
 
@@ -868,17 +870,19 @@ bool WNCATParser::tx(const char *pattern, ...) {
     return true;
 }
 
-int WNCATParser::scancopy(char *buf, int buf_len) {
+size_t WNCATParser::readline(char *buffer, size_t max, uint32_t timeout) {
     char response[512];
+
     //TODO use if (readable()) here
     do {
-        readline(response, 512 - 1, 10);
+        _readline(response, 512 - 1, timeout);
     } while (checkURC(response) != -1);
-
-    strncpy(buf, response, buf_len);
-
+   
     CIODEBUG("GSM (%02d) -> '%s'\r\n", strlen(response), response);
-    return strlen(buf);;
+
+    strncpy(buffer, response, max);
+
+    return strlen(buffer);
 }
 
 int WNCATParser::scan(const char *pattern, ...) {
@@ -886,7 +890,7 @@ int WNCATParser::scan(const char *pattern, ...) {
 
     //TODO use if (readable()) here
     do {
-        readline(response, 512 - 1, 10);
+        _readline(response, 512 - 1, 10);
     } while (checkURC(response) != -1);
 
     va_list ap;
@@ -899,11 +903,18 @@ int WNCATParser::scan(const char *pattern, ...) {
 }
 
 bool WNCATParser::rx(const char *pattern, uint32_t timeout) {
+    Timer timer;
+    timer.start();
+
     char response[512];
     size_t length = 0, patternLength = strnlen(pattern, sizeof(response));
     do {
-        length = readline(response, 512 - 1, timeout);
+        length = _readline(response, 512 - 1, timeout);
         if (!length) return false;
+        if (timer.read() > timeout) {
+           tr_error("rx() timeout");
+           return false;
+        }
 
         CIODEBUG("GSM (%02d) -> '%s'\r\n", strlen(response), response);
     } while (checkURC(response) != -1);
@@ -957,7 +968,7 @@ size_t WNCATParser::read(char *buffer, size_t max, uint32_t timeout) {
     return idx;
 }
 
-size_t WNCATParser::readline(char *buffer, size_t max, uint32_t timeout) {
+size_t WNCATParser::_readline(char *buffer, size_t max, uint32_t timeout) {
     Timer timer;
     timer.start();
 

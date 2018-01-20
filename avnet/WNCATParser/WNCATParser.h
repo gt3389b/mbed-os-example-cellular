@@ -323,6 +323,9 @@ private:
 
     void _packet_handler(const char *response);
 
+    // interal readline
+    size_t _readline(char *buffer, size_t max, uint32_t timeout);
+
     int32_t _check_queue(int id, void *data, uint32_t amount);
     int32_t _enqueue(int id, char *data, uint32_t amount);
 
