@@ -57,17 +57,13 @@ DigitalOut  mdm_uart1_cts(PTD0);
 WNCATParser::WNCATParser(PinName txPin, PinName rxPin, PinName rstPin, PinName pwrPin)
     : _serial(txPin, rxPin, RXTX_BUFFER_SIZE), _powerPin(pwrPin), _resetPin(rstPin),  _packets(0), _packets_end(&_packets) 
 {
-
-    //CSTDEBUG("WNC [--] start\r\n");
     tr_warn("WNC [--] init\r\n");
     _serial.baud(GSM_UART_BAUD_RATE);
     _powerPin = 0;
     _initialized = false;
 }
 
-bool WNCATParser::startup(void) {
-    tr_debug("WNC [--] startup\r\n");
-
+bool WNCATParser::hard_reset(void) {
    // Hard reset the modem (doesn't go through
    // the signal level translator)
    mdm_reset = 0;
@@ -94,21 +90,18 @@ bool WNCATParser::startup(void) {
    //When enabled, there will be no changes in these 4 pins...
    shield_3v3_1v8_sig_trans_ena = 1; 
 
-   //bool success = reset() && tx("AT+QIMUX=1") && rx("OK");
-   //bool success = reset() && tx("AT") && rx("OK");
-   bool success = reset();
+   return true;
+}
 
-   /*
-   if (success) {
-     tr_debug("Toggling Wakeup...\n");
-     wait_ms(20);
-     mdm_wakeup_in = 0;
-     wait_ms(2000);
-     mdm_wakeup_in = 1;
-     wait_ms(20);
-     tr_debug("Toggling complete.\n");
-   }
-   */
+
+bool WNCATParser::startup(void) {
+    tr_debug("WNC [--] startup\r\n");
+
+   hard_reset();
+
+   wait_ms(2000);
+
+   bool success = reset();
 
    _initialized = success;
    return success;

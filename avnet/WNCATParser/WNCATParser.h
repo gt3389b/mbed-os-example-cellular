@@ -77,6 +77,14 @@ public:
     bool reset(void);
 
     /**
+    * Hard Reset WNC
+    *
+    * @return true only if WNC resets successfully
+    * play with PWERKEY - (only) to reset the modem, make sure the modem is reset and alive
+    */
+    bool hard_reset(void);
+
+    /**
     * Check if the Modem is poweredup and running
     *
     * @return true only if WNC OK's to AT cmd

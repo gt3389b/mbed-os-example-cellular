@@ -245,14 +245,14 @@ int main()
     if (do_connect(&iface) == NSAPI_ERROR_OK) {
         tr_info("test_send_recv\n");
         nsapi_error_t retcode = test_send_recv(&iface);
-        if (retcode == NSAPI_ERROR_OK) {
-            tr_debug("Success. Exiting \n\n");
-            return 0;
+        if (retcode != NSAPI_ERROR_OK) {
+            tr_error("Failure. Exiting \n\n");
+            return -1;
         }
     }
 
-    tr_error("Failure. Exiting \n\n");
-    return -1;
+    tr_info("\nSuccess!  Exiting \n\n");
+    return 0;
 }
 
 #if 0
