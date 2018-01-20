@@ -1,10 +1,11 @@
 /*
- * ubirch#1 M66 Modem core functionality interface.
+ * AVNET WNC14A2A Modem core functionality interface.
  *
- * @author Niranjan Rao
- * @date 2017-02-09
+ * @author Russell Leake
+ * @author Niranjan Rao (original)
+ * @date 2018-01-20
  *
- * @copyright &copy; 2015, 2016, 2017 ubirch GmbH (https://ubirch.com)
+ * @copyright &copy; 2018 (russellleake@eaton.com)
  *
  * ```
  * Licensed under the Apache License, Version 2.0 (the "License");

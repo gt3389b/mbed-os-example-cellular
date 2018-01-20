@@ -25,7 +25,6 @@
 #include <cctype>
 #include <fsl_rtc.h>
 #include <string>
-#include "mbed_debug.h"
 #include "WNCATParser.h"
 #include "mbed-trace/mbed_trace.h"
 
@@ -95,47 +94,43 @@ bool WNCATParser::startup(void) {
    //When enabled, there will be no changes in these 4 pins...
    shield_3v3_1v8_sig_trans_ena = 1; 
 
-    //bool success = reset() && tx("AT+QIMUX=1") && rx("OK");
-    //bool success = reset() && tx("AT") && rx("OK");
-    bool success = reset();
+   //bool success = reset() && tx("AT+QIMUX=1") && rx("OK");
+   //bool success = reset() && tx("AT") && rx("OK");
+   bool success = reset();
 
-    /*
-    if (success) {
-      tr_debug("Toggling Wakeup...\n");
-      wait_ms(20);
-      mdm_wakeup_in = 0;
-      wait_ms(2000);
-      mdm_wakeup_in = 1;
-      wait_ms(20);
-      tr_debug("Toggling complete.\n");
-    }
-    */
+   /*
+   if (success) {
+     tr_debug("Toggling Wakeup...\n");
+     wait_ms(20);
+     mdm_wakeup_in = 0;
+     wait_ms(2000);
+     mdm_wakeup_in = 1;
+     wait_ms(20);
+     tr_debug("Toggling complete.\n");
+   }
+   */
 
-    _initialized = success;
-    return success;
+   _initialized = success;
+   return success;
 }
 
 bool WNCATParser::powerDown(void) {
-    //TODO call this function if connection fails or on some unexpected events
-    //bool normalPowerDown = tx("AT+QPOWD=1") && rx("NORMAL POWER DOWN", 20);
-
-    //_powerPin =  0;
-
-    //return normalPowerDown;
-    return false;
+   bool normalPowerDown = tx("AT@SHUTDOWN") && rx("OK", 20);
+   _powerPin =  0;
+   return normalPowerDown;
 }
 
 bool WNCATParser::isModemAlive() {
-    return (tx("AT") && rx("OK"));
+   return (tx("AT") && rx("OK"));
 }
 
 int WNCATParser::checkGPRS() {
-    int val = -1;
-    if (!isModemAlive())
-        return false;
-    int ret = (tx("AT+CGATT?") && scan("+CGATT: %d", &val) && rx("OK", 10));
-    tr_debug("checkGPRS: %s",val? "ATTACHED":"DETACHED");
-    return val && ret;
+   int val = -1;
+   if (!isModemAlive())
+      return false;
+   int ret = (tx("AT+CGATT?") && scan("+CGATT: %d", &val) && rx("OK", 10));
+   tr_debug("checkGPRS: %s", val ? "ATTACHED":"DETACHED");
+   return val && ret;
 }
 
 bool WNCATParser::reset(void) {
@@ -149,10 +144,9 @@ bool WNCATParser::reset(void) {
         tr_warn("WNC [--] !! reset (%d)\r\n", tries);
 
 
+        // see if the modem replies health first
         if (isModemAlive()) return true;
 			wait_ms(500);
-
-        tr_debug("Echo may be enabled\n");
 
         // TODO check if need delay here to wait for boot
         // Emit AT looking for AT or OK (echo potentially enabled)
@@ -560,15 +554,21 @@ bool WNCATParser::send(int id, const void *data, uint32_t amount) {
          * TODO use QISACK after you receive SEND OK, to check if whether the data has been sent to the remote
          */
         for (int i = 0; i < 2; i++) {
-            char numStr[512];
+            // dump binary
+				CIODUMP((uint8_t *) tempData, (size_t)sendDataSize);
+
+            // binary to hex string
+            char numStr[RXTX_BUFFER_SIZE];
             itohex(numStr, tempData, sendDataSize);
             numStr[sendDataSize * 2] = '\0';
-				CIODUMP((uint8_t *) tempData, (size_t)sendDataSize);
+
+            // write to socket
             int wrote;
             ret = tx("AT@SOCKWRITE=%d,%d,\"%s\"", id, sendDataSize, numStr) && 
                   scan("@SOCKWRITE:%d",&wrote) && rx("OK");
             if (wrote != sendDataSize) return false;
             if (!ret) return false;
+
         } //for:i
         tempData += sendDataSize;
     }//while
@@ -578,128 +578,20 @@ bool WNCATParser::send(int id, const void *data, uint32_t amount) {
 /*TODO Use this commmand to get the IP status before running IP commands(open, send, ..)
  * getIPAddress() can also be used
  * A string parameter to indicate the status of the connection
- * "IP INITIAL"     :: The TCPIP stack is in idle state
- * "IP START"       :: The TCPIP stack has been registered
- * "IP CONFIG"      :: It has been start-up to activate GPRS/CSD context
- * "IP IND"         :: It is activating GPRS/CSD context
- * "IP GPRSACT"     :: GPRS/CSD context has been activated successfully
- * "IP STATUS"      :; The local IP address has been gotten by the command AT+QILOCIP
- * "TCP CONNECTING" :: It is trying to establish a TCP connection
- * "UDP CONNECTING" :: It is trying to establish a UDP connection
- * "IP CLOSE"       :: The TCP/UDP connection has been closed
- * "CONNECT OK"     :: The TCP/UDP connection has been established successfully
- * "PDP DEACT"      :: GPRS/CSD context was deactivated because of unknown reason
  */
 int WNCATParser::queryConnection() {
     int qstate = -1;
 
-#if 0
-    char resp[20];
-    tr_debug("queryConnection()\n");
-    if (!(tx("ATV0") && rx("0"))) return false;
-
-    bool ret = (tx("AT+QISTATE") && scan("%d", &qstate));
-
-    scan("+QISTATE:0, %s", resp);
-    scan("+QISTATE:1, %s", resp);
-    scan("+QISTATE:2, %s", resp);
-    scan("+QISTATE:3, %s", resp);
-    scan("+QISTATE:4, %s", resp);
-    scan("+QISTATE:5, %s", resp);
-    rx("0");
-
-    ret &= (tx("ATV1") && rx("OK"));
-
-    if (!ret) return false;
-
-#endif
     return qstate;
 }
 
-bool parse_ip_addr(char *str) {
-   return true;
-}
+//bool parse_ip_addr(char *str) {
+//   return true;
+//}
 
 void WNCATParser::_packet_handler(const char *response) {
-#if 0
-    int id;
-    int session_indicator;
-    unsigned int amount;
-    tr_debug("_packet_handler=%s\n", response);
-    static int active_id;
-
-    // if data available indicator
-    if (!strncmp("@SOCKDATAIND:", response, 13)) {
-      if (sscanf(response, "@SOCKDATAIND: %d,%d,%d", &id, &session_indicator, &amount) != 3) {
-         return;
-      }
-      tr_debug("@SOCKDATAIND id=%d, session_indicator=%d, amount=%d\n",id,session_indicator,amount);
-      if(amount) {
-         tx("AT@SOCKREAD=%d,%d",id, MAX_SEND_BYTES);
-      }
-      // TODO:  I don't like this
-      active_id = id;
-      return;
-    }
-
-    // if data read
-    if (!strncmp("@SOCKREAD:", response, 10)) {
-      tr_debug("@SOCKREAD\n");
-      if (sscanf(response, "@SOCKREAD:%d,", &amount) != 1) {
-         tr_error("@SOCKREAD ERROR\n");
-         return;
-      }
-
-      id = active_id;
-
-      // expect an OK
-      rx("OK");
-
-      // expect another indicator
-      //int still_left;
-      //scan("@SOCKDATAIND:%d,%d", &id, &still_left);
-      //if (still_left) // if there's more, then request it
-      //   tx("AT@SOCKREAD=%d,%d",id, MAX_SEND_BYTES);
-
-      // no data to process
-      if(!amount) {
-         tr_warn("No amount data to process\n");
-         return;
-      }
-
-      CSTDEBUG("WNC [%02d] -> %d bytes\r\n", id, amount);
-
-      struct packet *packet = (struct packet *) malloc(sizeof(struct packet) + amount);
-      if (!packet) {
-         return;
-      }
-
-      packet->id = id;
-      packet->len = (uint32_t) amount;
-      packet->next = 0;
-
-      char tmp[3];
-      tmp[2] = 0;
-      char *packet_data = packet->data;
-      char *data = strchr(response, '\"');
-      data += 1;
-      for(unsigned int n=0; n<amount*2; n+=2) {
-         tmp[0] = *data++;
-         tmp[1] = *data++;
-         *packet_data=(char)strtol(tmp,NULL,16);
-         //tr_debug("%s %02x\n",tmp, *packet_data);
-         packet_data++;
-      }
-
-      CIODUMP((uint8_t *) packet->data, (size_t)amount);
-
-      tr_debug("Enqueue packet id=%d\n",packet->id);
-
-      // append to packet list
-      *_packets_end = packet;
-      _packets_end = &packet->next;
-    }
-#endif
+   tr_error("_packet_handler unsupported");
+   return;
 }
 
 int32_t WNCATParser::_check_queue(int id, void *data, uint32_t amount) {
@@ -747,6 +639,7 @@ int32_t WNCATParser::_enqueue(int id, char *data, uint32_t amount) {
    packet->len = (uint32_t) amount;
    packet->next = 0;
 
+   // string to binary
    char tmp[3];
    tmp[2] = 0;
    char *packet_data = packet->data;
@@ -758,6 +651,7 @@ int32_t WNCATParser::_enqueue(int id, char *data, uint32_t amount) {
       packet_data++;
    }
 
+   // dump binary data
    CIODUMP((uint8_t *) packet->data, (size_t)amount);
 
    tr_debug("Enqueue packet id=%d len=%u\n",packet->id, (unsigned int)packet->len);
@@ -770,6 +664,7 @@ int32_t WNCATParser::_enqueue(int id, char *data, uint32_t amount) {
 }
 
 int32_t WNCATParser::recv(int id, void *data, uint32_t amount) {
+   char recvBuffer[RXTX_BUFFER_SIZE];
    int32_t ret = 0;
     Timer timer;
     timer.start();
@@ -778,27 +673,14 @@ int32_t WNCATParser::recv(int id, void *data, uint32_t amount) {
     while (timer.read_ms() < _timeout) {
         CSTDEBUG("WNC [%02d] !! _timeout=%d, time=%d\r\n", id, (int) _timeout, (int) timer.read() * 1000);
 
-        ret = _check_queue(id, data, amount);
+        ret = _check_queue(id, recvBuffer, amount);
         if (ret)
            return ret;
 
-        // Wait for inbound packet
-        // TODO check what happens when we receive a packet (like OK)
-        // TODO the response code may be different if connection is still open
-        // TODO it may need to be moved to packet handler
-        //int receivedId;
-        //if (!scan("%d, CLOSED", &receivedId) && id == receivedId) {
-        tr_debug("Scanning . . .\n");
-#if 0
-        if(!rx("ERROR"))
-            tr_error("Falling out\n");
-            return -1;
-       // }
-#else
+        tr_debug("RECV:  Waiting . . .\n");
         int id, session_indicator;
         uint32_t amount;
         uint32_t actual_length;
-        char data[512];
         if (scan("@SOCKDATAIND: %d,%d,%d", &id, &session_indicator, &amount) == 3) {
             tr_debug("@SOCKDATAIND id=%d, session_indicator=%d, amount=%u\n",id,session_indicator,(unsigned int)amount);
             // more data
@@ -807,15 +689,15 @@ int32_t WNCATParser::recv(int id, void *data, uint32_t amount) {
             }
             // no more data
             else {
+               tr_debug("RECV:  no more data indicated id=%d\n",id);
                return -1;
             }
         }
-        if (scan("@SOCKREAD: %d,\"%s\"", &actual_length, data) == 2) {
-            tr_debug("Got data %u %s\n", (unsigned int)actual_length, data);
+        if (scan("@SOCKREAD: %d,\"%s\"", &actual_length, recvBuffer) == 2) {
+            tr_debug("Got data len=%u data=%s\n", (unsigned int)actual_length, recvBuffer);
             rx("OK");
-            _enqueue(id, data, actual_length);
+            _enqueue(id, recvBuffer, actual_length);
         }
-#endif
     }
 
     // timeout
@@ -869,6 +751,7 @@ bool WNCATParser::tx(const char *pattern, ...) {
     return true;
 }
 
+// readline ensuring the reader doesn't get notifications
 size_t WNCATParser::readline(char *buffer, size_t max, uint32_t timeout) {
     char response[512];
 
@@ -885,11 +768,21 @@ size_t WNCATParser::readline(char *buffer, size_t max, uint32_t timeout) {
 }
 
 int WNCATParser::scan(const char *pattern, ...) {
+    Timer timer;
+    timer.start();
+    uint32_t timeout = 10;
+
     char response[512];
 
     //TODO use if (readable()) here
     do {
         _readline(response, 512 - 1, 10);
+
+        if (timer.read() > timeout) {
+           tr_error("scan() timeout\n");
+           return -1;
+        }
+
     } while (checkURC(response) != -1);
 
     va_list ap;
@@ -911,7 +804,7 @@ bool WNCATParser::rx(const char *pattern, uint32_t timeout) {
         length = _readline(response, 512 - 1, timeout);
         if (!length) return false;
         if (timer.read() > timeout) {
-           tr_error("rx() timeout");
+           tr_error("rx() timeout\n");
            return false;
         }
 
@@ -922,16 +815,6 @@ bool WNCATParser::rx(const char *pattern, uint32_t timeout) {
 }
 
 int WNCATParser::checkURC(const char *response) {
-    /*
-    if (!strncmp("@SOCKDATAIND:", response, 13)) {
-        _packet_handler(response);
-        return 0;
-    }
-    if (!strncmp("@SOCKREAD:", response, 10)) {
-        _packet_handler(response);
-        return 0;
-    }
-    */
     if (!strncmp("%NOTIFY", response, 7)) {
         tr_debug("GSM -> %s\n", response);
         return 0;
