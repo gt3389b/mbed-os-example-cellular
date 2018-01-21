@@ -161,7 +161,8 @@ bool WNCATParser::reset(void) {
 
         //ret = tx("AT&V") && rx("OK");
   		  // Get firmware version
-  		  tx("AT+GMR") && scan("MPSS: %60s", response) && rx("OK");
+  		  //tx("AT+GMR") && scan("MPSS: %60s", response) && rx("OK");
+  		  tx("AT+GMR") && readline(response, 60, 5) && rx("OK");
 		  tr_debug("%s\n", response);
 
   		  //tx("AT+QNWINFO") && scan("%60s", response) && rx("OK");
@@ -476,15 +477,22 @@ bool WNCATParser::queryIP(const char *url, char *theIP) {
 
    tr_debug("queryIP(url=%s)\n", url);
     for(int i = 0; i < 3; i++) {
-        if(tx("AT@DNSRESVDON=\"%s\"", url)
-             && scan("@DNSRESVDON:\"%s\"", theIP) &&
-              rx("OK")){
-           // RDL:  TODO:  probably not right
-            if(strncmp(theIP, "ERROR", 5) != 0) { 
-               theIP[strlen(theIP)-1] = 0;
+        char *quote;
+        char response[64];
+        tx("AT@DNSRESVDON=\"%s\"", url);
+
+        while(1) {
+            readline(response, 64, 10);
+            if (!strncmp("OK", response, 2))
                return true;
-            }
-        } wait(1);
+
+            sscanf(response, "@DNSRESVDON:\"%s\"", theIP);
+            quote = strchr(theIP, '\"');
+            *quote = 0;
+            tr_debug("IP: %s\n", theIP);
+        }
+        
+        wait(1);
     }
     return false;
 }
@@ -614,10 +622,13 @@ int32_t WNCATParser::_check_queue(int id, void *data, uint32_t amount) {
       if ((*p)->id == id) {
             struct packet *q = *p;
 
-            tr_debug("Packet ready: %d\n",(int)q->len);
+            tr_debug("Packet ready: id=%d len=%d\n",(*p)->id, (int)q->len);
             if (q->len <= amount) { // Return and remove full packet
-               //memcpy(data, q + 1, q->len);
+               printf("%p\n",data);
                memcpy(data, q->data, q->len);
+
+               // dump binary data
+               //CIODUMP((uint8_t *) data, (size_t)q->len);
 
                if (_packets_end == &(*p)->next) {
                   _packets_end = p;
@@ -628,11 +639,9 @@ int32_t WNCATParser::_check_queue(int id, void *data, uint32_t amount) {
                free(q);
                return len;
             } else { // return only partial packet
-               //memcpy(data, q + 1, amount);
                memcpy(data, q->data, amount);
 
                q->len -= amount;
-               //memmove(q + 1, (uint8_t *) (q + 1) + amount, q->len);
                memmove(q->data, (uint8_t *) q->data + amount, q->len);
 
                return amount;
@@ -665,7 +674,7 @@ int32_t WNCATParser::_enqueue(int id, char *data, uint32_t amount) {
    }
 
    // dump binary data
-   CIODUMP((uint8_t *) packet->data, (size_t)amount);
+   //CIODUMP((uint8_t *) packet->data, (size_t)amount);
 
    tr_debug("Enqueue packet id=%d len=%u\n",packet->id, (unsigned int)packet->len);
 
@@ -686,9 +695,12 @@ int32_t WNCATParser::recv(int id, void *data, uint32_t amount) {
     while (timer.read_ms() < _timeout) {
         CSTDEBUG("WNC [%02d] !! _timeout=%d, time=%d\r\n", id, (int) _timeout, (int) timer.read() * 1000);
 
-        ret = _check_queue(id, recvBuffer, amount);
-        if (ret)
+        //ret = _check_queue(id, recvBuffer, amount);
+        ret = _check_queue(id, data, amount);
+        if (ret) {
+           CIODUMP((uint8_t *) data, (size_t)ret);
            return ret;
+        }
 
         tr_debug("RECV:  Waiting . . .\n");
         int id, session_indicator;
@@ -707,7 +719,7 @@ int32_t WNCATParser::recv(int id, void *data, uint32_t amount) {
             }
         }
         if (scan("@SOCKREAD: %d,\"%s\"", &actual_length, recvBuffer) == 2) {
-            tr_debug("Got data len=%u data=%s\n", (unsigned int)actual_length, recvBuffer);
+            //tr_debug("Got data len=%u data=%s\n", (unsigned int)actual_length, recvBuffer);
             rx("OK");
             _enqueue(id, recvBuffer, actual_length);
         }

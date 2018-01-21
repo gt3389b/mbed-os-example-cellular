@@ -160,6 +160,7 @@ nsapi_error_t test_send_recv(WNC14A2AInterface *iface)
     int n = 0;
     const char *echo_string = "TEST";
     char recv_buf[512];
+    memset(recv_buf, 0, 512);
 #if MBED_CONF_APP_SOCK_TYPE == TCP
     retcode = sock.connect(sock_addr);
     if (retcode < 0) {
@@ -184,9 +185,13 @@ nsapi_error_t test_send_recv(WNC14A2AInterface *iface)
     n = sock.recv((void*) recv_buf, 512);
 
     if (n > 0) {
-        snprintf(print_text, PRINT_TEXT_LENGTH, "Received from echo server %d Bytes\n", n);
+        snprintf(print_text, PRINT_TEXT_LENGTH, "Received from %d bytes from echo server\n", n);
+        tr_info(print_text);
+        snprintf(print_text, PRINT_TEXT_LENGTH, "Received from echo server: %s\n", recv_buf);
         tr_info(print_text);
     }
+
+    memset(recv_buf, 0, n);
 
     // get the second message
     n = sock.recv((void*) recv_buf, 4);
@@ -207,13 +212,23 @@ nsapi_error_t test_send_recv(WNC14A2AInterface *iface)
 
     sock.close();
 
-    if (n > 0) {
-        snprintf(print_text, PRINT_TEXT_LENGTH, "Received from echo server %d Bytes\n", n);
-        tr_info(print_text);
-        return 0;
+    // expect 4 bytes
+    if (n != 4) {
+      snprintf(print_text, PRINT_TEXT_LENGTH, "ERROR: Received from echo server %d Bytes\n", n);
+      tr_info(print_text);
+      return -1;
     }
 
-    return -1;
+    if (memcmp(echo_string, recv_buf, 4)) {
+      snprintf(print_text, PRINT_TEXT_LENGTH, "ERROR: Received from echo %s\n", recv_buf);
+      tr_info(print_text);
+      return -1;
+    }
+
+   snprintf(print_text, PRINT_TEXT_LENGTH, "Received from echo %s\n", recv_buf);
+   tr_info(print_text);
+
+   return 0;
 }
 
 // debug printf function
@@ -254,36 +269,4 @@ int main()
     tr_info("\nSuccess!  Exiting \n\n");
     return 0;
 }
-
-#if 0
-int main()
-{
-    mbed_trace_init();
-    mbed_trace_print_function_set(trace_printer);
-    mbed_trace_config_set(TRACE_MODE_COLOR | TRACE_ACTIVE_LEVEL_DEBUG | TRACE_CARRIAGE_RETURN);
-
-    tr_error("Hello World\n");
-    WNC14A2AInterface modem(PTD3, PTD2, PTC12, PTB9, true);
-    //modem.modem_debug_on(MBED_CONF_APP_MODEM_TRACE);
-
-    /* Set Pin code for SIM card */
-    //modem.set_sim_pin(MBED_CONF_APP_SIM_PIN_CODE);
-
-    /* Set network credentials here, e.g., APN*/
-    modem.set_credentials(MBED_CONF_APP_APN, MBED_CONF_APP_USERNAME, MBED_CONF_APP_PASSWORD);
-    tr_error("Set Credentials\n");
-    while(1) {
-      bool res = modem.powerUpModem();
-      if (!res) {
-         tr_debug("power up failed!\n");
-         wait_ms(500);
-      }
-      else
-         break;
-    }
-    tr_debug("connecting ...\n");
-    modem.connect();
-    return 0;
-}
-#endif
 // EOF
