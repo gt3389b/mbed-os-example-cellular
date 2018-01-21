@@ -144,25 +144,13 @@ nsapi_error_t test_send_recv(WNC14A2AInterface *iface)
         return -1;
     }
 
-    SocketAddress sock_addr;
-    tr_debug("gethostbyename()\n");
-    retcode = iface->gethostbyname(host_name, &sock_addr, NSAPI_IPv4);
-    if (retcode != NSAPI_ERROR_OK) {
-        snprintf(print_text, PRINT_TEXT_LENGTH, "Couldn't resolve remote host: %s, code: %d\n", host_name,
-               retcode);
-        tr_error(print_text);
-        return -1;
-    }
-
-    sock_addr.set_port(port);
-
     sock.set_timeout(15000);
     int n = 0;
     const char *echo_string = "TEST";
     char recv_buf[512];
     memset(recv_buf, 0, 512);
 #if MBED_CONF_APP_SOCK_TYPE == TCP
-    retcode = sock.connect(sock_addr);
+    retcode = sock.connect(host_name, port);
     if (retcode < 0) {
         snprintf(print_text, PRINT_TEXT_LENGTH, "TCPSocket.connect() fails, code: %d\n", retcode);
         tr_info(print_text);
@@ -196,8 +184,8 @@ nsapi_error_t test_send_recv(WNC14A2AInterface *iface)
     // get the second message
     n = sock.recv((void*) recv_buf, 4);
 #else
-
-    retcode = sock.sendto(sock_addr, (void*) echo_string, sizeof(echo_string));
+    SocketAddress sock_addr;
+    retcode = sock.sendto(host_name, port, (void*) echo_string, sizeof(echo_string));
     if (retcode < 0) {
         snprintf(print_text, PRINT_TEXT_LENGTH, "UDPSocket.sendto() fails, code: %d\n", retcode);
         tr_info(print_text);

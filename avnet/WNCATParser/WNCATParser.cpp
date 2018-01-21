@@ -358,8 +358,6 @@ const char *WNCATParser::getIPAddress(void) {
        tr_error("not initialized\n");
        return NULL;
     }
-
-    //if (!(tx("AT+QILOCIP") && scan("%s", _ip_buffer))) {
     //'+CGCONTRDP: 1,5,"m2m.com.attz.mnc170.mcc310.gprs",10.192.234.63.255.255.255.128,10.192.234.1,8.8.8.8,8.8.4.4,,,'
     char buffer[256];
     //int size;
@@ -486,6 +484,9 @@ bool WNCATParser::queryIP(const char *url, char *theIP) {
             if (!strncmp("OK", response, 2))
                return true;
 
+            if (!strncmp("ERROR", response, 5))
+               return false;
+            
             sscanf(response, "@DNSRESVDON:\"%s\"", theIP);
             quote = strchr(theIP, '\"');
             *quote = 0;
