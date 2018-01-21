@@ -625,7 +625,6 @@ int32_t WNCATParser::_check_queue(int id, void *data, uint32_t amount) {
 
             tr_debug("Packet ready: id=%d len=%d\n",(*p)->id, (int)q->len);
             if (q->len <= amount) { // Return and remove full packet
-               printf("%p\n",data);
                memcpy(data, q->data, q->len);
 
                // dump binary data
